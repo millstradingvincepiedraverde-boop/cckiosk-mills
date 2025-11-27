@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono, Poppins } from "next/font/google";
 import "./globals.css";
 import FloatingDoxy from "@/app/components/FloatingDoxy"; // 👈 import here
+import FloatingKioskCall from "./components/FlotingKioskCall";
 
 // const geistSans = Geist({
 //   variable: "--font-geist-sans",
@@ -34,7 +35,7 @@ export default function RootLayout({
     <html lang="en">
       <body className={` ${poppins.variable} antialiased`}>
         {children}
-        <FloatingDoxy />
+        <FloatingKioskCall />
 
       </body>
     </html>
