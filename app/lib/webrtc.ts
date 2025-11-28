@@ -1,5 +1,5 @@
 // app/lib/webrtc.ts - Complete fix with proper signaling
-import { db } from "@/app/firebase";
+import { db } from "@/lib/firebase";
 import {
     collection,
     doc,

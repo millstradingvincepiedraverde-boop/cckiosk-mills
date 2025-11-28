@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { rtcConfig } from "@/app/lib/rtcConfig";
 import { joinRoom } from "@/app/lib/webrtc";
 import { collection, onSnapshot } from "firebase/firestore";
-import { firestore } from "@/app/firebase";
+import { firestore } from "@/lib/firebase";
 
 interface Room {
     id: string;
