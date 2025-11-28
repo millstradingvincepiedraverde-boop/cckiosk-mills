@@ -15,12 +15,20 @@ export default function AgentCallPage() {
     const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
     const pcRef = useRef<RTCPeerConnection | null>(null);
     const localStreamRef = useRef<MediaStream | null>(null);
+    const initStartedRef = useRef(false); // Prevent double initialization
 
     const [connected, setConnected] = useState(false);
     const [status, setStatus] = useState("Initializing...");
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
+        // Prevent double initialization in StrictMode
+        if (initStartedRef.current) {
+            console.log("⚠️ Init already started, skipping");
+            return;
+        }
+        initStartedRef.current = true;
+
         let mounted = true;
 
         async function initCall() {
@@ -44,7 +52,14 @@ export default function AgentCallPage() {
                 // 2. Attach local video
                 if (localVideoRef.current) {
                     localVideoRef.current.srcObject = localStream;
-                    localVideoRef.current.play().catch(console.warn);
+                    // Wait for metadata before playing
+                    localVideoRef.current.onloadedmetadata = () => {
+                        if (mounted && localVideoRef.current) {
+                            localVideoRef.current.play().catch(e => {
+                                console.warn("Local play error:", e.name);
+                            });
+                        }
+                    };
                 }
 
                 setStatus("Creating peer connection...");
@@ -65,9 +80,16 @@ export default function AgentCallPage() {
                         remoteStream.addTrack(track);
                     });
 
-                    // Force play remote video
-                    if (remoteVideoRef.current) {
-                        remoteVideoRef.current.play().catch(console.warn);
+                    // Force play remote video with safety check
+                    if (mounted && remoteVideoRef.current) {
+                        // Wait a bit for stream to be fully attached
+                        setTimeout(() => {
+                            if (mounted && remoteVideoRef.current) {
+                                remoteVideoRef.current.play().catch(e => {
+                                    console.warn("Remote play error:", e.name);
+                                });
+                            }
+                        }, 100);
                     }
                 };
 
@@ -139,7 +161,7 @@ export default function AgentCallPage() {
 
     return (
         <div className="w-full h-screen bg-gray-900 text-white relative">
-            {/* Local video (small) */}
+            {/* Local video (small) - Always rendered */}
             <video
                 ref={localVideoRef}
                 autoPlay
@@ -147,14 +169,20 @@ export default function AgentCallPage() {
                 playsInline
                 style={{ transform: "scaleX(-1)" }}
                 className="absolute w-48 h-48 bottom-4 right-4 rounded-lg shadow-lg z-10 border-2 border-green-500 object-cover bg-gray-800"
+                onLoadedMetadata={(e) => {
+                    console.log("📹 Local video ready:", e.currentTarget.videoWidth, "x", e.currentTarget.videoHeight);
+                }}
             />
 
-            {/* Remote video (main) */}
+            {/* Remote video (main) - Always rendered */}
             <video
                 ref={remoteVideoRef}
                 autoPlay
                 playsInline
                 className="w-full h-full object-cover bg-gray-800"
+                onLoadedMetadata={(e) => {
+                    console.log("📺 Remote video ready:", e.currentTarget.videoWidth, "x", e.currentTarget.videoHeight);
+                }}
             />
 
             {/* Status overlay (while connecting) */}
