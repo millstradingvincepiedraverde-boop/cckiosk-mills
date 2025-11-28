@@ -45,7 +45,6 @@ export default function AgentPage() {
                     const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
                     return timeB - timeA;
                 });
-
             setRooms(availableRooms);
         });
 
@@ -60,51 +59,49 @@ export default function AgentPage() {
         setStatus("Getting camera...");
 
         try {
-            // 1️⃣ Get local media with constraints
+            // 1️⃣ Get local media
             const localStream = await navigator.mediaDevices.getUserMedia({
                 video: { width: 1280, height: 720 },
                 audio: true,
             });
             localStreamRef.current = localStream;
 
-            // 2️⃣ Display local video
+            // 2️⃣ Attach local stream to video
             if (localVideoRef.current) {
-                const videoEl = localVideoRef.current;
-                videoEl.srcObject = localStream;
-                videoEl.muted = true;
-                videoEl.playsInline = true;
-
-                videoEl.onloadedmetadata = () => {
-                    setTimeout(() => {
-                        videoEl.play().catch((e) => console.warn("❌ Local video play error", e));
-                    }, 50);
+                localVideoRef.current.srcObject = localStream;
+                localVideoRef.current.muted = true;
+                localVideoRef.current.playsInline = true;
+                localVideoRef.current.onloadedmetadata = () => {
+                    localVideoRef.current?.play().catch(console.warn);
                 };
             }
 
             setStatus("Creating peer connection...");
 
-            // 3️⃣ Create peer connection
+            // 3️⃣ Create PeerConnection
             const peer = new RTCPeerConnection(rtcConfig);
             peerRef.current = peer;
 
             // 4️⃣ Add local tracks
             localStream.getTracks().forEach((track) => peer.addTrack(track, localStream));
 
-            // 5️⃣ Set up remote stream
-            const remoteStream = new MediaStream();
-            if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStream;
-
+            // 5️⃣ Attach remote tracks directly to video element
             peer.ontrack = (event) => {
-                console.log("📺 Remote track received:", event.track.kind);
-                remoteStream.addTrack(event.track);
+                if (!remoteVideoRef.current) return;
+                const stream = remoteVideoRef.current.srcObject as MediaStream | null;
 
-                if (remoteVideoRef.current) {
-                    const videoEl = remoteVideoRef.current;
-                    videoEl.srcObject = remoteStream;
-                    videoEl.onloadedmetadata = () => {
-                        videoEl.play().catch((e) => console.error("❌ Remote video play error", e));
-                    };
+                if (stream) {
+                    // Already has a MediaStream
+                    stream.addTrack(event.track);
+                } else {
+                    // Create new MediaStream and attach
+                    const newStream = new MediaStream([event.track]);
+                    remoteVideoRef.current.srcObject = newStream;
                 }
+
+                remoteVideoRef.current.onloadedmetadata = () => {
+                    remoteVideoRef.current?.play().catch(console.error);
+                };
             };
 
             // 6️⃣ Monitor connection
@@ -122,7 +119,7 @@ export default function AgentPage() {
 
             setStatus("Joining room...");
 
-            // 7️⃣ Join the room
+            // 7️⃣ Join room (signal)
             await joinRoom(roomId, peer);
             setStatus("Waiting for connection...");
         } catch (error) {
@@ -148,7 +145,6 @@ export default function AgentPage() {
     if (connected && selectedRoom) {
         return (
             <div className="w-full h-screen bg-gray-900 text-white relative">
-                {/* Local video */}
                 <video
                     ref={localVideoRef}
                     autoPlay
@@ -157,24 +153,18 @@ export default function AgentPage() {
                     style={{ transform: "scaleX(-1)" }}
                     className="absolute w-48 h-48 bottom-4 right-4 rounded-lg shadow-lg z-10 border-2 border-green-500 object-cover bg-gray-800"
                 />
-
-                {/* Remote video */}
                 <video
                     ref={remoteVideoRef}
                     autoPlay
                     playsInline
                     className="w-full h-full object-cover bg-gray-800"
                 />
-
-                {/* Hangup button */}
                 <button
                     onClick={handleHangup}
                     className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-red-600 hover:bg-red-700 text-white px-8 py-4 rounded-full font-semibold transition-colors shadow-lg z-20"
                 >
                     📞 End Call
                 </button>
-
-                {/* Status */}
                 <div className="absolute top-4 left-4 bg-black/80 p-4 rounded-lg z-20">
                     <div className="text-sm text-gray-300">Room: {selectedRoom.slice(0, 8)}...</div>
                     <div className="text-green-500 font-semibold">● Connected</div>
@@ -183,7 +173,7 @@ export default function AgentPage() {
         );
     }
 
-    // Waiting dashboard view
+    // Waiting dashboard
     return (
         <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-100 p-8">
             <div className="max-w-4xl mx-auto">
