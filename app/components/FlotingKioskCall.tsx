@@ -1,14 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function FloatingKioskCall() {
+    const router = useRouter();
+
     const [mode, setMode] = useState<"hidden" | "full" | "mini">("hidden");
-    const [roomId, setRoomId] = useState<string | null>(null);
+    const iframeRef = useRef<HTMLIFrameElement>(null);
+    const [iframeLoaded, setIframeLoaded] = useState(false);
 
     useEffect(() => {
         function openCall() {
-            console.log("📞 Opening kiosk in FULL mode...");
+            console.log("📞 FULL mode");
             setMode("full");
         }
 
@@ -16,16 +20,13 @@ export default function FloatingKioskCall() {
 
         function handleMessage(e: any) {
             if (e.data?.type === "KIOSK_CONNECTED") {
-                console.log("📬 Parent received: KIOSK_CONNECTED");
+                console.log("📬 Received KIOSK_CONNECTED");
 
-                setRoomId(e.data.roomId);
-
-                // Switch to MINI mode
+                // Change size only — keep same iframe session
                 setMode("mini");
 
-                window.location.href = "/choose-service";
-
-
+                // NOW you can redirect parent safely
+                router.push("/choose-service");
             }
         }
 
@@ -37,43 +38,27 @@ export default function FloatingKioskCall() {
         };
     }, []);
 
+    // Load kiosk only once, never again
+    useEffect(() => {
+        if (iframeRef.current && !iframeLoaded) {
+            iframeRef.current.src = "/kiosk";
+            setIframeLoaded(true);
+        }
+    }, [iframeLoaded]);
+
     if (mode === "hidden") return null;
 
     return (
-        <>
-            {/* FULL-SCREEN MODE */}
-            {mode === "full" && (
-                <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[9999]">
-                    <div className="relative w-[92vw] h-[92vh] bg-black rounded-xl shadow-xl overflow-hidden">
-
-                        <iframe
-                            src="/kiosk"
-                            allow="camera *; microphone *; fullscreen *; autoplay *; display-capture *"
-                            allowFullScreen
-                            className="w-full h-full"
-                        />
-                    </div>
-                </div>
-            )}
-
-            {/* MINI FLOATING WINDOW (Picture-in-Picture) */}
-            {mode === "mini" && (
-                <div
-                    className="
-                        fixed bottom-4 right-4
-                        w-[260px] h-[150px]
-                        bg-black rounded-lg shadow-xl border border-white
-                        overflow-hidden z-[9999]
-                    "
-                >
-                    <iframe
-                        src="/kiosk"
-                        allow="camera *; microphone *; fullscreen *; autoplay *; display-capture *"
-                        allowFullScreen
-                        className="w-full h-full pointer-events-none"
-                    />
-                </div>
-            )}
-        </>
+        <iframe
+            ref={iframeRef}
+            allow="camera *; microphone *; fullscreen *; autoplay *; display-capture *"
+            className={`
+                fixed z-[9999] bg-black rounded-xl shadow-xl border border-white
+                transition-all duration-300
+                ${mode === "full"
+                    ? "inset-0 w-[92vw] h-[92vh] m-auto"
+                    : "bottom-4 right-4 w-[260px] h-[150px]"}
+            `}
+        />
     );
 }
