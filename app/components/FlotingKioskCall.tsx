@@ -5,22 +5,20 @@ import { useRouter } from "next/navigation";
 
 export default function FloatingKioskCall() {
     const router = useRouter();
-
     const [mode, setMode] = useState<"hidden" | "full" | "mini">("hidden");
     const iframeRef = useRef<HTMLIFrameElement>(null);
 
-    // Load kiosk ONCE only
+    // Load kiosk ONLY ONCE
     useEffect(() => {
         if (iframeRef.current) {
-            console.log("🔵 Loading /kiosk...");
-            iframeRef.current.src = "/kiosk";
+            console.log("🎥 Loading kiosk once...");
+            iframeRef.current.src = "/kiosk";        // ← stays forever
         }
     }, []);
 
-    // Listeners
     useEffect(() => {
         function openCall() {
-            console.log("🟢 open-call RECEIVED → opening FULL mode");
+            console.log("📞 FULL MODE");
             setMode("full");
         }
 
@@ -28,12 +26,9 @@ export default function FloatingKioskCall() {
 
         function handleMessage(e: any) {
             if (e.data?.type === "KIOSK_CONNECTED") {
-                console.log("🟢 Parent: Received KIOSK_CONNECTED");
+                console.log("📬 MINI MODE - DO NOT RELOAD IFRAME");
 
-                // shrink iframe
-                setMode("mini");
-
-                // go to next page
+                setMode("mini");               // ← only resizes; iframe stays alive
                 router.push("/choose-service");
             }
         }
@@ -46,17 +41,15 @@ export default function FloatingKioskCall() {
         };
     }, []);
 
-    if (mode === "hidden") {
-        return null;
-    }
+    if (mode === "hidden") return null;
 
     return (
         <iframe
             ref={iframeRef}
-            allow="camera *; microphone *; fullscreen *; autoplay *; display-capture *"
+            allow="camera *; microphone *; autoplay *; fullscreen *; display-capture *"
             className={`
                 fixed z-[9999] bg-black rounded-xl shadow-xl border border-white
-                transition-all duration-300 ease-in-out
+                transition-all duration-300
                 ${mode === "full"
                     ? "inset-0 w-[92vw] h-[92vh] m-auto"
                     : "bottom-4 right-4 w-[260px] h-[150px]"}
