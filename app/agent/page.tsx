@@ -1,4 +1,3 @@
-// app/agent/page.tsx - Simplified and Fixed
 "use client";
 
 import { useEffect, useRef, useState } from "react";
@@ -28,8 +27,6 @@ export default function AgentPage() {
 
     // Listen for available rooms
     useEffect(() => {
-        console.log("👂 Listening for available rooms...");
-
         const roomsRef = collection(firestore, "rooms");
         const unsubscribe = onSnapshot(roomsRef, (snapshot) => {
             const availableRooms = snapshot.docs
@@ -39,17 +36,16 @@ export default function AgentPage() {
                         id: doc.id,
                         offer: data.offer,
                         answer: data.answer,
-                        createdAt: data.createdAt
+                        createdAt: data.createdAt,
                     };
                 })
-                .filter((room) => !room.answer) // Only show rooms without an answer
+                .filter((room) => !room.answer)
                 .sort((a, b) => {
                     const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
                     const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
                     return timeB - timeA;
                 });
 
-            console.log("📋 Available rooms:", availableRooms.length);
             setRooms(availableRooms);
         });
 
@@ -64,105 +60,61 @@ export default function AgentPage() {
         setStatus("Getting camera...");
 
         try {
-            console.log("🚪 Joining room:", roomId);
-
-            // 1. Get local media FIRST
-            console.log("🎥 Requesting media devices...");
-            const localStream = await navigator.mediaDevices.getUserMedia({
-                video: true,
-                audio: true,
-            });
+            // 1️⃣ Get local media
+            const localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
             localStreamRef.current = localStream;
 
-            console.log("✅ Media devices acquired");
-            console.log("📹 Video tracks:", localStream.getVideoTracks().map(t => t.label));
-            console.log("🎤 Audio tracks:", localStream.getAudioTracks().map(t => t.label));
-
-            // Set local video
+            // 2️⃣ Display local video
             if (localVideoRef.current) {
-                localVideoRef.current.srcObject = localStream;
-                console.log("📹 Local video srcObject set");
-
-                // Force play
-                try {
-                    await localVideoRef.current.play();
-                    console.log("✅ Local video playing");
-                } catch (e) {
-                    console.error("❌ Local video play error:", e);
-                }
+                const videoEl = localVideoRef.current;
+                videoEl.srcObject = localStream;
+                videoEl.muted = true;
+                videoEl.playsInline = true;
+                try { await videoEl.play(); }
+                catch (e) { console.warn("❌ Local video play error", e); }
             }
 
             setStatus("Creating peer connection...");
 
-            // 2. Create peer connection
+            // 3️⃣ Create peer connection
             const peer = new RTCPeerConnection(rtcConfig);
             peerRef.current = peer;
 
-            console.log("🔌 Peer connection created");
+            // 4️⃣ Add local tracks to peer
+            localStream.getTracks().forEach(track => peer.addTrack(track, localStream));
 
-            // 3. Add local tracks
-            localStream.getTracks().forEach((track) => {
-                console.log("➕ Adding local track:", track.kind, track.label);
-                peer.addTrack(track, localStream);
-            });
-
-            // 4. Set up remote stream
+            // 5️⃣ Set up remote stream
             const remoteStream = new MediaStream();
-            if (remoteVideoRef.current) {
-                remoteVideoRef.current.srcObject = remoteStream;
-                console.log("📺 Remote video srcObject set");
-            }
+            if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStream;
 
+            // Handle remote tracks
             peer.ontrack = (event) => {
-                console.log("📺 ===== RECEIVED REMOTE TRACK =====");
-                console.log("📺 Kind:", event.track.kind);
-                console.log("📺 Label:", event.track.label);
-                console.log("📺 ReadyState:", event.track.readyState);
-                console.log("📺 Enabled:", event.track.enabled);
-                console.log("📺 Muted:", event.track.muted);
+                console.log("📺 Remote track received:", event.track.kind);
+                remoteStream.addTrack(event.track);
 
-                event.streams[0].getTracks().forEach((track) => {
-                    console.log("➕ Adding remote track to stream:", track.kind);
-                    remoteStream.addTrack(track);
-                });
-
-                // Force play remote video
                 if (remoteVideoRef.current) {
-                    console.log("🎬 Attempting to play remote video...");
-                    remoteVideoRef.current.play()
-                        .then(() => console.log("✅ Remote video playing"))
-                        .catch(e => console.error("❌ Remote video play error:", e));
+                    remoteVideoRef.current.play().catch(e => console.error("❌ Remote video play error", e));
                 }
             };
 
-            // 5. Monitor connection state
+            // 6️⃣ Monitor connection
             peer.onconnectionstatechange = () => {
-                console.log("🔗 Connection state:", peer.connectionState);
                 setStatus(`Connection: ${peer.connectionState}`);
-
                 if (peer.connectionState === "connected") {
-                    console.log("🎉 CONNECTED!");
                     setConnected(true);
                     setJoining(false);
                     setStatus("Connected!");
                 }
             };
 
-            peer.oniceconnectionstatechange = () => {
-                console.log("🧊 ICE state:", peer.iceConnectionState);
-            };
-
-            peer.onicegatheringstatechange = () => {
-                console.log("📡 ICE gathering state:", peer.iceGatheringState);
-            };
+            peer.oniceconnectionstatechange = () => console.log("🧊 ICE state:", peer.iceConnectionState);
+            peer.onicegatheringstatechange = () => console.log("📡 ICE gathering state:", peer.iceGatheringState);
 
             setStatus("Joining room...");
 
-            // 6. Join the room
+            // 7️⃣ Join the room
             await joinRoom(roomId, peer);
-            console.log("✅ Joined room successfully");
             setStatus("Waiting for connection...");
-
         } catch (error) {
             console.error("❌ Error joining room:", error);
             setJoining(false);
@@ -173,12 +125,8 @@ export default function AgentPage() {
     };
 
     const handleHangup = () => {
-        if (localStreamRef.current) {
-            localStreamRef.current.getTracks().forEach(track => track.stop());
-        }
-        if (peerRef.current) {
-            peerRef.current.close();
-        }
+        localStreamRef.current?.getTracks().forEach(track => track.stop());
+        peerRef.current?.close();
 
         setConnected(false);
         setSelectedRoom(null);
@@ -186,6 +134,7 @@ export default function AgentPage() {
         setStatus("idle");
     };
 
+    // Connected view
     if (connected && selectedRoom) {
         return (
             <div className="w-full h-screen bg-gray-900 text-white relative">
@@ -195,12 +144,8 @@ export default function AgentPage() {
                     autoPlay
                     muted
                     playsInline
-                    style={{ transform: 'scaleX(-1)' }}
+                    style={{ transform: "scaleX(-1)" }}
                     className="absolute w-48 h-48 bottom-4 right-4 rounded-lg shadow-lg z-10 border-2 border-green-500 object-cover bg-gray-800"
-                    onLoadedMetadata={(e) => {
-                        console.log("📹 Local video metadata loaded:", e.currentTarget.videoWidth, "x", e.currentTarget.videoHeight);
-                    }}
-                    onPlay={() => console.log("▶️ Local video started playing")}
                 />
 
                 {/* Remote video */}
@@ -209,10 +154,6 @@ export default function AgentPage() {
                     autoPlay
                     playsInline
                     className="w-full h-full object-cover bg-gray-800"
-                    onLoadedMetadata={(e) => {
-                        console.log("📺 Remote video metadata loaded:", e.currentTarget.videoWidth, "x", e.currentTarget.videoHeight);
-                    }}
-                    onPlay={() => console.log("▶️ Remote video started playing")}
                 />
 
                 {/* Hangup button */}
@@ -228,19 +169,11 @@ export default function AgentPage() {
                     <div className="text-sm text-gray-300">Room: {selectedRoom.slice(0, 8)}...</div>
                     <div className="text-green-500 font-semibold">● Connected</div>
                 </div>
-
-                {/* Debug info */}
-                {process.env.NODE_ENV === "development" && (
-                    <div className="absolute top-4 right-4 bg-black/80 p-3 rounded text-xs font-mono max-w-xs z-20">
-                        <div>Peer: {peerRef.current?.connectionState || "none"}</div>
-                        <div>ICE: {peerRef.current?.iceConnectionState || "none"}</div>
-                        <div>Local tracks: {localStreamRef.current?.getTracks().length || 0}</div>
-                    </div>
-                )}
             </div>
         );
     }
 
+    // Waiting dashboard view
     return (
         <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-100 p-8">
             <div className="max-w-4xl mx-auto">
@@ -263,9 +196,7 @@ export default function AgentPage() {
                 {rooms.length === 0 ? (
                     <div className="bg-white rounded-xl shadow-md p-12 text-center">
                         <div className="text-6xl mb-4">💤</div>
-                        <h2 className="text-2xl font-semibold text-gray-700 mb-2">
-                            No Active Calls
-                        </h2>
+                        <h2 className="text-2xl font-semibold text-gray-700 mb-2">No Active Calls</h2>
                         <p className="text-gray-500">
                             Waiting for customers to initiate calls...
                         </p>
@@ -281,9 +212,7 @@ export default function AgentPage() {
                                     <div className="flex-1">
                                         <div className="flex items-center gap-3 mb-2">
                                             <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                                            <h3 className="text-lg font-semibold text-gray-900">
-                                                Customer Waiting
-                                            </h3>
+                                            <h3 className="text-lg font-semibold text-gray-900">Customer Waiting</h3>
                                         </div>
                                         <p className="text-sm text-gray-500 font-mono">
                                             Room: {room.id.slice(0, 12)}...
@@ -299,9 +228,7 @@ export default function AgentPage() {
                                         disabled={joining}
                                         className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
                                     >
-                                        {joining && selectedRoom === room.id
-                                            ? "Joining..."
-                                            : "Join Call"}
+                                        {joining && selectedRoom === room.id ? "Joining..." : "Join Call"}
                                     </button>
                                 </div>
                             </div>
