@@ -22,6 +22,10 @@ export default function FloatingKioskCall() {
 
                 // Switch to MINI mode
                 setMode("mini");
+
+                window.location.href = "/choose-service";
+
+
             }
         }
 
