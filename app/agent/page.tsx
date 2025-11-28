@@ -91,11 +91,30 @@ export default function AgentPage() {
 
     // attach local stream and attempt play
     const attachLocalStream = async (stream: MediaStream | null) => {
-        if (!localVideoRef.current || !stream) return;
-        localVideoRef.current.srcObject = stream;
-        localVideoRef.current.muted = true;
-        localVideoRef.current.playsInline = true;
-        localVideoRef.current.onloadedmetadata = () => attemptPlay(localVideoRef.current).catch(() => { });
+        const video = localVideoRef.current;
+        if (!video || !stream) return;
+
+        // Set attributes BEFORE attaching stream
+        video.muted = true;
+        video.playsInline = true;
+        video.autoplay = true;
+        video.controls = false;
+        video.setAttribute("webkit-playsinline", "true");
+
+        // Attach the stream
+        video.srcObject = stream;
+
+        // iOS Safari sometimes needs a manual load
+        video.load();
+
+        // Ensure playback
+        try {
+            await video.play();
+        } catch (e) {
+            console.warn("Local video play blocked:", e);
+            setNeedsPlayTap(true);
+        }
+
         setDiag((d) => ({ ...d, localTracks: stream.getTracks().length }));
     };
 
