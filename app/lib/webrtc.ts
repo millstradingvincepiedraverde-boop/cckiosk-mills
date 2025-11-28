@@ -119,7 +119,11 @@ export async function createRoom(peerConnection: RTCPeerConnection): Promise<str
     }
 }
 
-export async function joinRoom(roomId: string, peerConnection: RTCPeerConnection, p0: (sdp: any) => any): Promise<void> {
+export async function joinRoom(
+    roomId: string,
+    peerConnection: RTCPeerConnection,
+    sdpFilter?: (sdp: string) => string
+): Promise<void> {
     try {
         console.log("🚪 Joining room:", roomId);
 
@@ -170,7 +174,18 @@ export async function joinRoom(roomId: string, peerConnection: RTCPeerConnection
 
         // 1. Set Offer → create Answer
         console.log("📥 [CALLEE] Setting remote description (offer)...");
-        const offer = new RTCSessionDescription(roomData.offer);
+        let offerSdp = roomData.offer.sdp;
+
+        // Apply SDP filter if provided
+        if (sdpFilter && offerSdp) {
+            offerSdp = sdpFilter(offerSdp);
+            console.log("🔧 [CALLEE] SDP filter applied");
+        }
+
+        const offer = new RTCSessionDescription({
+            type: roomData.offer.type,
+            sdp: offerSdp
+        });
         await peerConnection.setRemoteDescription(offer);
         console.log("✅ [CALLEE] Remote description set");
 
@@ -181,15 +196,28 @@ export async function joinRoom(roomId: string, peerConnection: RTCPeerConnection
         });
 
         console.log("📤 [CALLEE] Setting local description...");
-        await peerConnection.setLocalDescription(answer);
-        console.log("✅ [CALLEE] Local description set:", answer.type);
+
+        // Apply SDP filter to answer if provided
+        let answerSdp = answer.sdp;
+        if (sdpFilter && answerSdp) {
+            answerSdp = sdpFilter(answerSdp);
+            console.log("🔧 [CALLEE] SDP filter applied to answer");
+        }
+
+        const filteredAnswer = new RTCSessionDescription({
+            type: answer.type,
+            sdp: answerSdp
+        });
+
+        await peerConnection.setLocalDescription(filteredAnswer);
+        console.log("✅ [CALLEE] Local description set:", filteredAnswer.type);
 
         // Save answer to Firestore
         console.log("💾 [CALLEE] Saving answer to Firestore...");
         await setDoc(roomRef, {
             answer: {
-                type: answer.type,
-                sdp: answer.sdp,
+                type: filteredAnswer.type,
+                sdp: filteredAnswer.sdp,
             }
         }, { merge: true });
         console.log("✅ [CALLEE] Answer saved to Firestore");
