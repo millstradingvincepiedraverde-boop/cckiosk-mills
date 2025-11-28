@@ -191,7 +191,6 @@ export default function Home() {
       </footer>
 
       {/* 🚀 Add the floating kiosk call */}
-      <FloatingKioskCall />
     </main>
   );
 }
