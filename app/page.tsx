@@ -122,6 +122,7 @@
 "use client";
 import Image from "next/image";
 import { useEffect, useState } from "react";
+import FloatingKioskCall from "@/app/components/FlotingKioskCall";
 
 const images = [
   "/images/click_collect.svg",
@@ -174,10 +175,7 @@ export default function Home() {
         role="button"
         tabIndex={0}
         aria-label="Touch to start"
-        onClick={() => {
-          //  Open the Floating Doxy
-          window.dispatchEvent(new Event("open-doxy"));
-        }}
+        onClick={() => window.dispatchEvent(new Event("open-call"))}
       >
         <Image
           src="/images/hand.png"
@@ -190,6 +188,9 @@ export default function Home() {
           TOUCH TO START
         </span>
       </footer>
+
+      {/* 🚀 Add the floating kiosk call */}
+      <FloatingKioskCall />
     </main>
   );
 }
