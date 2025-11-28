@@ -60,8 +60,11 @@ export default function AgentPage() {
         setStatus("Getting camera...");
 
         try {
-            // 1️⃣ Get local media
-            const localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+            // 1️⃣ Get local media with constraints
+            const localStream = await navigator.mediaDevices.getUserMedia({
+                video: { width: 1280, height: 720 },
+                audio: true,
+            });
             localStreamRef.current = localStream;
 
             // 2️⃣ Display local video
@@ -70,8 +73,12 @@ export default function AgentPage() {
                 videoEl.srcObject = localStream;
                 videoEl.muted = true;
                 videoEl.playsInline = true;
-                try { await videoEl.play(); }
-                catch (e) { console.warn("❌ Local video play error", e); }
+
+                videoEl.onloadedmetadata = () => {
+                    setTimeout(() => {
+                        videoEl.play().catch((e) => console.warn("❌ Local video play error", e));
+                    }, 50);
+                };
             }
 
             setStatus("Creating peer connection...");
@@ -80,20 +87,23 @@ export default function AgentPage() {
             const peer = new RTCPeerConnection(rtcConfig);
             peerRef.current = peer;
 
-            // 4️⃣ Add local tracks to peer
-            localStream.getTracks().forEach(track => peer.addTrack(track, localStream));
+            // 4️⃣ Add local tracks
+            localStream.getTracks().forEach((track) => peer.addTrack(track, localStream));
 
             // 5️⃣ Set up remote stream
             const remoteStream = new MediaStream();
             if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStream;
 
-            // Handle remote tracks
             peer.ontrack = (event) => {
                 console.log("📺 Remote track received:", event.track.kind);
                 remoteStream.addTrack(event.track);
 
                 if (remoteVideoRef.current) {
-                    remoteVideoRef.current.play().catch(e => console.error("❌ Remote video play error", e));
+                    const videoEl = remoteVideoRef.current;
+                    videoEl.srcObject = remoteStream;
+                    videoEl.onloadedmetadata = () => {
+                        videoEl.play().catch((e) => console.error("❌ Remote video play error", e));
+                    };
                 }
             };
 
@@ -125,7 +135,7 @@ export default function AgentPage() {
     };
 
     const handleHangup = () => {
-        localStreamRef.current?.getTracks().forEach(track => track.stop());
+        localStreamRef.current?.getTracks().forEach((track) => track.stop());
         peerRef.current?.close();
 
         setConnected(false);
@@ -197,9 +207,7 @@ export default function AgentPage() {
                     <div className="bg-white rounded-xl shadow-md p-12 text-center">
                         <div className="text-6xl mb-4">💤</div>
                         <h2 className="text-2xl font-semibold text-gray-700 mb-2">No Active Calls</h2>
-                        <p className="text-gray-500">
-                            Waiting for customers to initiate calls...
-                        </p>
+                        <p className="text-gray-500">Waiting for customers to initiate calls...</p>
                     </div>
                 ) : (
                     <div className="grid gap-4">
