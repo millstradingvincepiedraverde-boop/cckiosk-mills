@@ -91,31 +91,45 @@ export default function AgentPage() {
 
     // attach local stream and attempt play
     const attachLocalStream = async (stream: MediaStream | null) => {
-        const video = localVideoRef.current;
-        if (!video || !stream) return;
-
-        // Set attributes BEFORE attaching stream
-        video.muted = true;
-        video.playsInline = true;
-        video.autoplay = true;
-        video.controls = false;
-        video.setAttribute("webkit-playsinline", "true");
-
-        // Attach the stream
-        video.srcObject = stream;
-
-        // iOS Safari sometimes needs a manual load
-        video.load();
-
-        // Ensure playback
-        try {
-            await video.play();
-        } catch (e) {
-            console.warn("Local video play blocked:", e);
-            setNeedsPlayTap(true);
+        if (!localVideoRef.current || !stream) {
+            console.warn("No video element or stream to attach.");
+            return;
         }
 
-        setDiag((d) => ({ ...d, localTracks: stream.getTracks().length }));
+        const video = localVideoRef.current;
+
+        // 🔥 SUPER IMPORTANT for PC/Desktop Chrome
+        // The video MUST have visible dimensions BEFORE srcObject
+        video.style.display = "block";
+        video.style.width = "320px";
+        video.style.height = "180px";
+        video.style.opacity = "1";
+        video.style.visibility = "visible";
+
+        // Required for autoplay (desktop + mobile)
+        video.muted = true;
+        video.playsInline = true;
+
+        console.log("🔵 Attaching stream:", stream.getTracks());
+
+        // Attach stream
+        video.srcObject = stream;
+
+        video.onloadedmetadata = async () => {
+            try {
+                await video.play();
+                console.log("▶ Local video playback started.");
+            } catch (err) {
+                console.error("⚠ Local video play failed:", err);
+                setNeedsPlayTap(true);
+            }
+        };
+
+        // Update diagnostics
+        setDiag((prev) => ({
+            ...prev,
+            localTracks: stream.getTracks().length,
+        }));
     };
 
     // attach remote stream (event.streams[0] preferred)
