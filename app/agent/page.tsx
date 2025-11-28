@@ -45,6 +45,7 @@ export default function AgentPage() {
                     const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
                     return timeB - timeA;
                 });
+
             setRooms(availableRooms);
         });
 
@@ -66,45 +67,41 @@ export default function AgentPage() {
             });
             localStreamRef.current = localStream;
 
-            // 2️⃣ Attach local stream to video
+            // 2️⃣ Show local video
             if (localVideoRef.current) {
-                localVideoRef.current.srcObject = localStream;
-                localVideoRef.current.muted = true;
-                localVideoRef.current.playsInline = true;
-                localVideoRef.current.onloadedmetadata = () => {
-                    localVideoRef.current?.play().catch(console.warn);
-                };
+                const videoEl = localVideoRef.current;
+                videoEl.srcObject = localStream;
+                videoEl.muted = true;
+                videoEl.playsInline = true;
+
+                videoEl.onloadedmetadata = () => videoEl.play().catch(() => null);
             }
 
             setStatus("Creating peer connection...");
 
-            // 3️⃣ Create PeerConnection
+            // 3️⃣ Create peer connection
             const peer = new RTCPeerConnection(rtcConfig);
             peerRef.current = peer;
 
             // 4️⃣ Add local tracks
             localStream.getTracks().forEach((track) => peer.addTrack(track, localStream));
 
-            // 5️⃣ Attach remote tracks directly to video element
+            // 5️⃣ Prepare remote stream
+            const remoteStream = new MediaStream();
+            if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStream;
+
             peer.ontrack = (event) => {
-                if (!remoteVideoRef.current) return;
-                const stream = remoteVideoRef.current.srcObject as MediaStream | null;
-
-                if (stream) {
-                    // Already has a MediaStream
-                    stream.addTrack(event.track);
-                } else {
-                    // Create new MediaStream and attach
-                    const newStream = new MediaStream([event.track]);
-                    remoteVideoRef.current.srcObject = newStream;
+                remoteStream.addTrack(event.track);
+                if (remoteVideoRef.current) {
+                    const videoEl = remoteVideoRef.current;
+                    videoEl.srcObject = remoteStream;
+                    videoEl.playsInline = true;
+                    videoEl.autoplay = true;
+                    videoEl.onloadedmetadata = () => videoEl.play().catch(() => console.warn("Remote video play blocked"));
                 }
-
-                remoteVideoRef.current.onloadedmetadata = () => {
-                    remoteVideoRef.current?.play().catch(console.error);
-                };
             };
 
-            // 6️⃣ Monitor connection
+            // 6️⃣ Connection monitoring
             peer.onconnectionstatechange = () => {
                 setStatus(`Connection: ${peer.connectionState}`);
                 if (peer.connectionState === "connected") {
@@ -119,8 +116,16 @@ export default function AgentPage() {
 
             setStatus("Joining room...");
 
-            // 7️⃣ Join room (signal)
-            await joinRoom(roomId, peer);
+            // 7️⃣ Join the room
+            await joinRoom(roomId, peer, (sdp) => {
+                // Optional: filter SDP for iOS compatibility (H264 + VP8)
+                let filteredSDP = sdp
+                    .replace(/a=rtpmap:\d+ VP9\/90000\r\n/g, "")
+                    .replace(/a=rtpmap:\d+ AV1\/90000\r\n/g, "")
+                    .replace(/a=rtpmap:\d+ H265\/90000\r\n/g, "");
+                return filteredSDP;
+            });
+
             setStatus("Waiting for connection...");
         } catch (error) {
             console.error("❌ Error joining room:", error);
@@ -153,18 +158,21 @@ export default function AgentPage() {
                     style={{ transform: "scaleX(-1)" }}
                     className="absolute w-48 h-48 bottom-4 right-4 rounded-lg shadow-lg z-10 border-2 border-green-500 object-cover bg-gray-800"
                 />
+
                 <video
                     ref={remoteVideoRef}
                     autoPlay
                     playsInline
                     className="w-full h-full object-cover bg-gray-800"
                 />
+
                 <button
                     onClick={handleHangup}
                     className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-red-600 hover:bg-red-700 text-white px-8 py-4 rounded-full font-semibold transition-colors shadow-lg z-20"
                 >
                     📞 End Call
                 </button>
+
                 <div className="absolute top-4 left-4 bg-black/80 p-4 rounded-lg z-20">
                     <div className="text-sm text-gray-300">Room: {selectedRoom.slice(0, 8)}...</div>
                     <div className="text-green-500 font-semibold">● Connected</div>
@@ -173,7 +181,7 @@ export default function AgentPage() {
         );
     }
 
-    // Waiting dashboard
+    // Waiting dashboard view
     return (
         <div className="min-h-screen bg-gradient-to-br from-purple-50 to-pink-100 p-8">
             <div className="max-w-4xl mx-auto">

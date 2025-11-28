@@ -119,7 +119,7 @@ export async function createRoom(peerConnection: RTCPeerConnection): Promise<str
     }
 }
 
-export async function joinRoom(roomId: string, peerConnection: RTCPeerConnection): Promise<void> {
+export async function joinRoom(roomId: string, peerConnection: RTCPeerConnection, p0: (sdp: any) => any): Promise<void> {
     try {
         console.log("🚪 Joining room:", roomId);
 
