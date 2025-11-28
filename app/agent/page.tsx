@@ -133,21 +133,47 @@ export default function AgentPage() {
     // ---------- attach remote stream ----------
     const attachRemoteStream = async (pc: RTCPeerConnection, event?: RTCTrackEvent) => {
         const el = remoteVideoRef.current;
-        if (!el) return;
+        if (!el) {
+            console.warn("⚠️ Remote video element not found");
+            return;
+        }
+
+        console.log("📺 Attaching remote stream...");
 
         // Prefer event.streams[0] (Safari) otherwise add tracks to persistent stream
         if (event && event.streams && event.streams.length > 0) {
+            console.log("📺 Using event.streams[0]");
             el.srcObject = event.streams[0];
-            el.onloadedmetadata = () => attemptPlay(el).catch(() => { });
+
+            // Ensure video element is ready
+            el.style.display = "block";
+            el.playsInline = true;
+            el.autoplay = true;
+
+            el.onloadedmetadata = () => {
+                console.log("📺 Remote video metadata loaded:", el.videoWidth, "x", el.videoHeight);
+                attemptPlay(el).catch(() => { });
+            };
         } else {
+            console.log("📺 Using persistent stream");
             if (!persistentRemoteRef.current) persistentRemoteRef.current = new MediaStream();
             if (event && event.track) {
                 if (!persistentRemoteRef.current.getTracks().some((t) => t.id === event.track.id)) {
                     persistentRemoteRef.current.addTrack(event.track);
+                    console.log("➕ Added track to persistent stream:", event.track.kind);
                 }
             }
             el.srcObject = persistentRemoteRef.current;
-            el.onloadedmetadata = () => attemptPlay(el).catch(() => { });
+
+            // Ensure video element is ready
+            el.style.display = "block";
+            el.playsInline = true;
+            el.autoplay = true;
+
+            el.onloadedmetadata = () => {
+                console.log("📺 Remote video metadata loaded:", el.videoWidth, "x", el.videoHeight);
+                attemptPlay(el).catch(() => { });
+            };
         }
 
         // update receivers diag
@@ -198,6 +224,17 @@ export default function AgentPage() {
             pc.ontrack = async (event) => {
                 console.log("ontrack:", event.track.kind, event.track.id, "streams:", event.streams?.length);
                 await attachRemoteStream(pc, event);
+
+                // Force play after short delay to ensure stream is attached
+                setTimeout(() => {
+                    if (remoteVideoRef.current) {
+                        console.log("🎬 Force playing remote video after track added");
+                        remoteVideoRef.current.play().catch(e => {
+                            console.warn("Remote play failed:", e);
+                            setNeedsPlayTap(true);
+                        });
+                    }
+                }, 200);
             };
 
             // connection state monitoring
@@ -209,7 +246,37 @@ export default function AgentPage() {
                     setConnected(true);
                     setJoining(false);
                     setStatus("Connected!");
-                    attemptPlay(remoteVideoRef.current).catch(() => { });
+
+                    // Force play videos when connected
+                    setTimeout(() => {
+                        console.log("🎬 Connection established, forcing video playback");
+                        attemptPlay(localVideoRef.current).catch(() => { });
+                        attemptPlay(remoteVideoRef.current).catch(() => { });
+
+                        // Diagnostic logging
+                        const videos = document.querySelectorAll('video');
+                        console.log("📊 Video diagnostics:");
+
+                        const localVideo = videos[0] as HTMLVideoElement;
+                        const remoteVideo = videos[1] as HTMLVideoElement;
+                        const localStream = localVideo?.srcObject as MediaStream | null;
+                        const remoteStream = remoteVideo?.srcObject as MediaStream | null;
+
+                        console.log("Local video:", {
+                            srcObject: !!localStream,
+                            tracks: localStream?.getTracks().length || 0,
+                            videoWidth: localVideo?.videoWidth || 0,
+                            videoHeight: localVideo?.videoHeight || 0,
+                            paused: localVideo?.paused
+                        });
+                        console.log("Remote video:", {
+                            srcObject: !!remoteStream,
+                            tracks: remoteStream?.getTracks().length || 0,
+                            videoWidth: remoteVideo?.videoWidth || 0,
+                            videoHeight: remoteVideo?.videoHeight || 0,
+                            paused: remoteVideo?.paused
+                        });
+                    }, 500);
                 }
             };
 
@@ -228,8 +295,33 @@ export default function AgentPage() {
             setStatus("Waiting for remote media...");
             setJoining(false);
 
-            // try play once in case tracks already attached
-            attemptPlay(remoteVideoRef.current).catch(() => { });
+            // Wait for tracks and force play
+            setTimeout(() => {
+                console.log("🎬 Post-join: attempting to play videos");
+                attemptPlay(localVideoRef.current).catch(() => { });
+                attemptPlay(remoteVideoRef.current).catch(() => { });
+
+                // Additional diagnostic
+                if (remoteVideoRef.current) {
+                    const remote = remoteVideoRef.current;
+                    const remoteStream = remote.srcObject as MediaStream | null;
+
+                    console.log("📊 Remote video check:", {
+                        hasSrcObject: !!remoteStream,
+                        trackCount: remoteStream?.getTracks().length || 0,
+                        videoWidth: remote.videoWidth,
+                        videoHeight: remote.videoHeight,
+                        paused: remote.paused,
+                        readyState: remote.readyState
+                    });
+
+                    // If video has dimensions but is paused, force play again
+                    if (remote.videoWidth > 0 && remote.paused) {
+                        console.log("🎬 Video has dimensions but is paused, forcing play");
+                        remote.play().catch(e => console.warn("Force play failed:", e));
+                    }
+                }
+            }, 1000);
         } catch (err) {
             console.error("Failed to join room:", err);
             setStatus("Error: " + (err instanceof Error ? err.message : String(err)));
